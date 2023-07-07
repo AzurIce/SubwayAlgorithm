@@ -10,8 +10,8 @@ import holidays
 import pandas as pd
 import matplotlib.pyplot as plt
 
-traffic_path = '../data/NYC_subway_traffic_2017-2021.csv'
-neighborhood_path = '../data/bigSmall.csv'
+traffic_path = 'NYC_subway_traffic_2017-2021.csv'
+neighborhood_path = 'bigSmall.csv'
 
 # 获取数据
 traffic_data = pd.read_csv(traffic_path)
