@@ -167,19 +167,24 @@ conn = pymysql.connect(
     db='NewYork'
 )
 cursor = conn.cursor()
-# #删除预测数据库中的数据
-# cursor.execute(' select * from PredictData')
-# result = cursor.fetchall()
-# cursor.execute('delete from predictData')
-# sql = 'insert into TrueData values(%s,%s,%s,%s)'
-# #将预测数据库中的所有数据随机扰动为真实数据
-# for row in result:
-#     id = row[0]
-#     dt = row[1]
-#     Entries = row[2]*(1+random.uniform(-0.5,1))
-#     Exits = row[3]*(1+random.uniform(-0.5,1))
-#     cursor.execute(sql,(id,dt,Entries,Exits))
-# conn.commit()
+#删除预测数据库中的数据
+cursor.execute('select * from PredictData')
+result = cursor.fetchall()
+# print(result)
+cursor.execute('delete from PredictData')
+conn.commit()
+sql = 'insert into TrueData values(%s,%s,%s,%s)'
+#将预测数据库中的所有数据随机扰动为真实数据
+i = 0
+for row in result:
+    id = row[0]
+    dt = row[1]
+    Entries = row[2]*(1+random.uniform(-0.5,1))
+    Exits = row[3]*(1+random.uniform(-0.5,1))
+    i+=1
+    cursor.execute(sql,(id,dt,Entries,Exits))
+    conn.commit()
+print(i)
 
 for id in ids:
     # 测试所保存的模型，并且获得未来4小时的预测
@@ -195,7 +200,7 @@ for id in ids:
     sql = "select distinct * from stationSize where id = %s "
     cursor.execute(sql,id)
     type = cursor.fetchall()
-    print(id)
+    # print(id)
     struct = type[0][2]
     neighborhoodSize = type[0][1]
     data = []
@@ -226,16 +231,16 @@ for id in ids:
     predictIn = float(predict.data.numpy()[0][0])
     predictIn = int(predictIn*(maI+miI)/2+0.5)
     # #用于预测出站的数据
-    # outPath = "./static_dict/zhandian1Exits.pth"
-    # m_state_dict = torch.load(outPath)
-    # moudle.load_state_dict(m_state_dict)
-    # predict = module(x_data)
-    # predictOut = float(predict.data.numpy()[0][0])
-    # predictOut = int(predictOut*(maO+maI)/2+0.5)
+    outPath = "./static_dict/zhandianExits1.pth"
+    m_state_dict = torch.load(outPath)
+    moudle.load_state_dict(m_state_dict)
+    predict = moudle(x_data)
+    predictOut = float(predict.data.numpy()[0][0])
+    predictOut = int(predictOut*(maO+maI)/2+0.5)
     # print("Entries"+str(predictIn))
     # print("Exits"+str(predictOut))
     sql = "insert into PredictData values (%s,%s,%s,%s)"
-    cursor.execute(sql, (id,str(dt),predictIn,predictIn))
+    cursor.execute(sql, (id,str(dt),predictIn,predictOut))
     # 提交事务
     cursor.close()
     conn.commit()

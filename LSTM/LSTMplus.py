@@ -17,7 +17,7 @@ import tqdm
 def get_Data(path):
     read_data = pd.read_csv(path)
     # 剔除空值
-    # read_data = read_data[:1000]
+    read_data = read_data[5000:]
     read_data = read_data.dropna()
     read_data = read_data[[
                            'Structure',
@@ -29,7 +29,7 @@ def get_Data(path):
                            'Hour',
                            'isHoliday',
                            'Neighborhood Size']]  # 以十个特征作为数据
-    label = read_data[['Entries']]  # 取Entries作为标签
+    label = read_data[['Exits']]  # 取Entries作为标签
     print(label.__len__)
     return read_data, label
 
@@ -181,7 +181,7 @@ for id in ids:
         iter+=1
         if iter % 100 == 0:
             print("iter: %d, loss: %1.5f" % (iter, loss.item()))
-    torch.save(moudle.state_dict(),"static_dict/zhandianEntries"+str(id)+".pth")
+    torch.save(moudle.state_dict(),"static_dict/zhandianExits"+str(id)+".pth")
     # print("./static_dict/zhandian"+str(id)+".pth")
     moudle.eval()
     result(x_data, y_data)
