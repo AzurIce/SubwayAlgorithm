@@ -221,7 +221,7 @@ for id in ids:
         Day = int(time_group.group(3))
         Hour = int(time_group.group(4))
         holiday = date(int(time_group.group(1)), int(time_group.group(2)), int(time_group.group(3))) in holidays.UnitedStates()
-        data.append([neighborhoodSize,result[i][0],result[i][1],Year,Month,Day,Hour,int(holiday),neighborhoodSize])
+        data.append([struct,result[i][0],result[i][1],Year,Month,Day,Hour,int(holiday),neighborhoodSize])
         dt = datetime.datetime(Year,Month,Day,Hour)
     dt = dt+ datetime.timedelta(hours=4)
     data = [data]
@@ -229,14 +229,14 @@ for id in ids:
     x_data=Variable(torch.Tensor(np.array(data)))
     predict = moudle(x_data)
     predictIn = float(predict.data.numpy()[0][0])
-    predictIn = int(predictIn*(maI+miI)/2+0.5)
+    predictIn = int(predictIn*(maI-miI)/2+miI+0.5)
     # #用于预测出站的数据
     outPath = "./static_dict/zhandianExits1.pth"
     m_state_dict = torch.load(outPath)
     moudle.load_state_dict(m_state_dict)
     predict = moudle(x_data)
     predictOut = float(predict.data.numpy()[0][0])
-    predictOut = int(predictOut*(maO+maI)/2+0.5)
+    predictOut = int(predictOut*(maO-maO)/2+maO+0.5)
     # print("Entries"+str(predictIn))
     # print("Exits"+str(predictOut))
     sql = "insert into PredictData values (%s,%s,%s,%s)"

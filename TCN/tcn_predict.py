@@ -1,93 +1,18 @@
-import pandas as pd
 import numpy as np
 import paddle
 import paddle.nn as nn
-import paddle.fluid as fluid
-from paddle.io import Dataset, DataLoader
 from paddlenlp.layers.tcn import TemporalBlock
+import pymysql
+import datetime
+import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-import warnings
-
-
-# 读取文件，并将文件按时间序列格式化
-data = pd.read_csv('new_traffic_data.csv')
-# data = data[-10000:]
-df_id = data[['Unique ID']]
-df_structure = data[['Structure']]
-df_nei = data[['Neighborhood Size']]
-df_entries = data[['Entries']]
-# print(df_entries)
-df_exits = data[['Exits']]
-df_isHoliday = data[['isHoliday']]
-
-df_entries_np = np.array(df_entries)
-df_exits_np = np.array(df_exits)
-df_isHoliday_np = np.array(df_isHoliday)
-df_id_np = np.array(df_id)
-df_structure_np = np.array(df_structure)
-df_nei_np = np.array(df_nei)
-df = pd.DataFrame(
-    df_isHoliday_np.ravel(),
-    columns=['isHoliday'],
-    index=pd.to_datetime(data['Datetime'])
-    #index=pd.date_range(start='2/4/2017 04:00:00', end='8/13/2021 16:00:00', freq='4H')
-)
-
-
-df['Exits'] = df_exits_np.ravel()
-df['Unique ID'] = df_id_np.ravel()
-df['Structure'] = df_structure_np.ravel()
-df['Neighborhood Size'] = df_nei_np.ravel()
-df['Entries'] = df_entries_np.ravel()
-df[['Exits', 'isHoliday', 'Entries', 'Unique ID', 'Structure', 'Neighborhood Size']]
-
-# 标准化
-df[['Exits', 'isHoliday', 'Entries', 'Unique ID', 'Structure', 'Neighborhood Size']] = MinMaxScaler().fit_transform(
-    df[['Exits', 'isHoliday', 'Entries', 'Unique ID', 'Structure', 'Neighborhood Size']]
-)
-std = MinMaxScaler()
-df[['Entries']] = std.fit_transform(df[['Entries']])
-load_min = std.data_min_
-load_max = std.data_max_
-load_para = pd.DataFrame({'load_min': load_min, 'load_max': load_max})
-# 将处理好的数据存起来
-load_para.to_csv('load_para_all.csv', index=False)
-df.to_csv('full_data.csv', index=True)
-df.loc['2021-5-10 04:00:00':'2021-7-13 00:00:00', :].to_csv('train_data.csv', index=True)
-df.loc['2021-7-13 04:00:00':'2021-08-13 16:00:00', :].to_csv('test_data.csv', index=True)
-
-from tqdm import tqdm
-class MyDataset(Dataset):
-    def __init__(self, mode):
-        super(MyDataset, self).__init__()
-        if mode == 'train':
-            df = pd.read_csv('train_data.csv', parse_dates=[0], index_col=[0])
-        elif mode == 'test':
-            df = pd.read_csv('test_data.csv', parse_dates=[0], index_col=[0])
-        #输入为前8天的数据，这样后面的一天就能获得7天的数据
-        time_step_day = 8
-        input_time_step = 1 * time_step_day
-        output_time_step = 1
-        df_len = df.shape[0]
-        input_size = df.shape[1]
-        data_len = df_len - input_time_step - output_time_step + 1
-        self.data = np.zeros((data_len, input_time_step, input_size))
-        self.label = np.zeros((data_len, output_time_step))
-        for i in tqdm(range(data_len)):
-            # print(i)
-            self.data[i, :, :] = np.array(df.iloc[i:i + input_time_step,:])
-            self.label[i, :] = np.array(df.iloc[i + input_time_step:i + input_time_step + output_time_step, -1])
-        print(np.shape(self.data))
-
-    def __getitem__(self, index):
-        data = self.data[index, :, :]
-        label = self.label[index, :]
-
-        return data, label
-
-    def __len__(self):
-        return self.label.shape[0]
+import pymysql
+import holidays
+import csv
+import re
+import datetime
+from datetime import date
+import random
 
 class MyNetwork(nn.Layer):
     def __init__(self, input_channel=6, num_channels=[64,32,8,1], kernel_size=3, dropout=0.2):
@@ -119,45 +44,103 @@ class MyNetwork(nn.Layer):
         output = paddle.squeeze(y_t, axis=1)[:, -output_time_step:] # 只取输出序列后1点
         return output
 
+import csv
+def getIDS():
+    i = 0
+    with open('stationID.csv','r') as f:
+        ids = []
+        reader = csv.reader(f)
+        for row in reader:
+            i+=1
+            if(i==1):
+                continue
+            ids.append(int(row[0]))
+    return ids
 
-DAY = 8800
-labList = []
-preList = []
-# 准备数据
-load_para = pd.read_csv('load_para_station1.csv')
-load_min = load_para['load_min'].values
-load_max = load_para['load_max'].values
-test_dataset = MyDataset(mode='test')
-loss = 0
-# 加载模型
-my_model = MyNetwork()
-my_model.eval()
-params_file_path = 'load_forcast_station1.pdparams'
+ids = getIDS()
+#更新数据库数据
+import random
+conn = pymysql.connect(
+    host='123.60.53.131',
+    charset='utf8',
+    user='xyh',
+    password='2023ShiXun',
+    db='NewYork'
+)
+cursor = conn.cursor()
+#删除预测数据库中的数据
+cursor.execute('select * from PredictData')
+result = cursor.fetchall()
+# print(result)
+cursor.execute('delete from PredictData')
+conn.commit()
+sql = 'insert into TrueData values(%s,%s,%s,%s)'
+#将预测数据库中的所有数据随机扰动为真实数据
+i = 0
+for row in result:
+    id = row[0]
+    dt = row[1]
+    Entries = row[2]*(1+random.uniform(-0.5,1))
+    Exits = row[3]*(1+random.uniform(-0.5,1))
+    i+=1
+    cursor.execute(sql,(id,dt,Entries,Exits))
+    conn.commit()
+print(i)
+moudelEntries = MyNetwork()
+moudelEntries.eval()
+params_file_path = 'load_forcast_entries.pdparams'
 param_dict = paddle.load(params_file_path)
-my_model.load_dict(param_dict)
-for i in tqdm(range(DAY)):
-    features, labels = test_dataset[i]
-    features = paddle.to_tensor(features, dtype='float32')
-    features = paddle.unsqueeze(features, axis=0)
-    labels = paddle.to_tensor(labels, dtype='float32')
-    # 模型预测
-    mse_loss = paddle.nn.MSELoss()
-    predicts = my_model(features)
-    mse = mse_loss(predicts, labels)
-    # print('mse:{}'.format(mse.numpy()))
-    predicts = predicts.numpy().flatten() * (load_max - load_min) + load_min
-    preList.append(predicts)
-    labels = labels.numpy() * (load_max - load_min) + load_min
-    labList.append(labels)
-# 结果可视化
-plt.figure()
-plt.plot( preList[1:], label='predict')
-plt.plot(labList[:-2], label='real')
-plt.legend()
-plt.show()
-for i in range(DAY-1):
-    loss+=abs(preList[i+1]-labList[i])
-print(loss/DAY)
-
-
-
+moudelEntries.load_dict(param_dict)
+moudelExits = MyNetwork()
+moudelExits.eval()
+params_file_path = 'load_forcast_exits.pdparams'
+param_dict = paddle.load(params_file_path)
+moudelExits.load_dict(param_dict)
+endTime = ''
+preTime = ''
+for id in ids:
+    # 测试所保存的模型，并且获得未来4小时的预测
+    cursor = conn.cursor()
+    #获得前6天的数据并且预测未来的一天的数据
+    sql = "select TEntries,TExits,dateTime from TrueData where ID= %s order by DateTime desc limit 0,6;"
+    cursor.execute(sql, id)
+    result = cursor.fetchall()
+    sql = "select distinct * from stationSize where id = %s "
+    cursor.execute(sql,id)
+    type = cursor.fetchall()
+    struct = type[0][2]
+    neighborhoodSize = type[0][1]
+    data = []
+    dt = ''
+    for i in range(6):
+        t = result[i][2]
+        time_group = re.match(r'(.*)-(.*)-(.*) (.*):(.*):(.*)', t)
+        Year = int(time_group.group(1))
+        Month = int(time_group.group(2))
+        Day = int(time_group.group(3))
+        Hour = int(time_group.group(4))
+        holiday = date(int(time_group.group(1)), int(time_group.group(2)), int(time_group.group(3))) in holidays.UnitedStates()
+        data.append([int(holiday),result[i][1]/40697,id/468,(struct-1)/4,neighborhoodSize/2,(result[i][0]-16)/4854])
+        dt = datetime.datetime(Year,Month,Day,Hour)
+    endTime = dt
+    dt = dt+ datetime.timedelta(hours=4)
+    preTime = dt
+    data = np.array(data)
+    data = paddle.to_tensor(data,dtype='float32')
+    data = paddle.unsqueeze(data,axis=0)  
+    predictIn = moudelEntries(data)
+    miI,maI = 16.0,4870.0
+    predictIn = int(predictIn.numpy().flatten()*(maI-miI)+miI+0.5) #数据反归一化
+    #用于预测出站的数据
+    predictOut = moudelExits(data)
+    miI,maI = 0.0,4069.0
+    predictOut = int(predictOut.numpy().flatten()*(maI-miI)+miI+0.5) #反归一化
+    print("Entries"+str(predictIn))
+    print("Exits"+str(predictOut))
+    sql = "insert into PredictData values (%s,%s,%s,%s)"
+    cursor.execute(sql, (id,str(dt),predictIn,predictOut))
+    # 提交事务
+sql = "update timeRange set endTime = %s,predictTime =%s"
+cursor.execute(sql,(str(endTime),str(preTime)))
+cursor.close()
+conn.commit()
