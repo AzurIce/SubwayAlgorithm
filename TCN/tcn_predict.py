@@ -120,7 +120,7 @@ for id in ids:
         Day = int(time_group.group(3))
         Hour = int(time_group.group(4))
         holiday = date(int(time_group.group(1)), int(time_group.group(2)), int(time_group.group(3))) in holidays.UnitedStates()
-        data.append([int(holiday),result[i][1]/40697,id/468,(struct-1)/4,neighborhoodSize/2,(result[i][0]-16)/4854])
+        data.append([int(holiday),(result[i][0]-16)/4854,result[i][1]/40697])
         dt = datetime.datetime(Year,Month,Day,Hour)
     endTime = dt
     dt = dt+ datetime.timedelta(hours=4)
@@ -129,7 +129,7 @@ for id in ids:
     data = paddle.to_tensor(data,dtype='float32')
     data = paddle.unsqueeze(data,axis=0)  
     predictIn = moudelEntries(data)
-    miI,maI = 16.0,4870.0
+    miI,maI = 18.0,4335.0
     predictIn = int(predictIn.numpy().flatten()*(maI-miI)+miI+0.5) #数据反归一化
     #用于预测出站的数据
     predictOut = moudelExits(data)
